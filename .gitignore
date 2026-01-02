@@ -1,6 +1,7 @@
 # Data directories
 pcg_data1/
 pcg_data2/
+ecg_data/
 
 # Trained models and scalers
 heart_sound_models/
