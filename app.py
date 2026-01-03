@@ -5,27 +5,32 @@ import librosa.display
 import joblib
 import os
 import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from sklearn.metrics import confusion_matrix, classification_report
 
 # Configuration
 MODEL_DIR = "./heart_sound_models"
 MODEL_PATH = os.path.join(MODEL_DIR, "heart_sound_model.pkl")
 LABEL_ENCODER_PATH = os.path.join(MODEL_DIR, "label_encoder.pkl")
 SCALER_PATH = os.path.join(MODEL_DIR, "scaler.pkl")
+METRICS_PATH = os.path.join(MODEL_DIR, "metrics.pkl")
 
 st.set_page_config(page_title="Heart Sound Classifier", page_icon="❤️")
 
 @st.cache_resource
 def load_model():
     if not os.path.exists(MODEL_PATH) or not os.path.exists(LABEL_ENCODER_PATH) or not os.path.exists(SCALER_PATH):
-        return None, None, None
+        return None, None, None, None
     try:
         model = joblib.load(MODEL_PATH)
         le = joblib.load(LABEL_ENCODER_PATH)
         scaler = joblib.load(SCALER_PATH)
-        return model, le, scaler
+        metrics = joblib.load(METRICS_PATH) if os.path.exists(METRICS_PATH) else None
+        return model, le, scaler, metrics
     except Exception as e:
         st.error(f"Error loading model: {e}")
-        return None, None, None
+        return None, None, None, None
 
 def extract_features(audio_data, sr):
     """
@@ -77,15 +82,47 @@ def extract_features(audio_data, sr):
         st.error(f"Error processing audio: {e}")
         return None
 
+def plot_confusion_matrix(cm, classes):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=classes, yticklabels=classes, ax=ax)
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    return fig
+
 def main():
     st.title("❤️ Heart Sound Classifier (Enhanced)")
-    st.write("Upload a heart sound recording (.wav) to classify it as **Normal** or **Abnormal**.")
-
-    model, le, scaler = load_model()
+    
+    model, le, scaler, metrics = load_model()
     
     if model is None:
         st.warning("Model files not found. Please ensure `heart_sound_model.pkl`, `label_encoder.pkl`, and `scaler.pkl` are in `heart_sound_models/`.")
         return
+
+    # Sidebar for Model Performance
+    st.sidebar.title("Model Performance")
+    show_metrics = st.sidebar.checkbox("Show Model Metrics", value=False)
+    
+    if show_metrics and metrics:
+        st.sidebar.markdown(f"**Test Accuracy:** `{metrics['accuracy']:.2%}`")
+        
+        st.subheader("📊 Model Performance Metrics")
+        
+        # Metrics Columns
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("### Confusion Matrix")
+            fig_cm = plot_confusion_matrix(metrics['confusion_matrix'], metrics['classes'])
+            st.pyplot(fig_cm)
+            
+        with col2:
+            st.write("### Classification Report")
+            report_df = pd.DataFrame(metrics['classification_report']).transpose()
+            st.dataframe(report_df.style.format("{:.2f}"))
+
+        st.write("---")
+
+    st.write("Upload a heart sound recording (.wav) to classify it as **Normal** or **Abnormal**.")
 
     uploaded_file = st.file_uploader("Choose a WAV file", type="wav")
 

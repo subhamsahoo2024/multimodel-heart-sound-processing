@@ -6,6 +6,8 @@ ecg_data/
 # Trained models and scalers
 heart_sound_models/
 *.pkl
+heart_ecg_model/
+*.keras
 
 # Cached features
 X_features.npy

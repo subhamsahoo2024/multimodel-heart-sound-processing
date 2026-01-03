@@ -14,9 +14,16 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 DATA_DIR = r"d:\ml practice\mutimodel-heart-sounds\pcg_data2"
 CSV_PATH = os.path.join(DATA_DIR, "training_data.csv")
 AUDIO_DIR = os.path.join(DATA_DIR, "training_data", "training_data")
-MODEL_PATH = "heart_sound_model.pkl"
-LABEL_ENCODER_PATH = "label_encoder.pkl"
-SCALER_PATH = "scaler.pkl"
+
+# Output Directory
+OUTPUT_DIR = "heart_sound_models"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+MODEL_PATH = os.path.join(OUTPUT_DIR, "heart_sound_model.pkl")
+LABEL_ENCODER_PATH = os.path.join(OUTPUT_DIR, "label_encoder.pkl")
+SCALER_PATH = os.path.join(OUTPUT_DIR, "scaler.pkl")
+METRICS_PATH = os.path.join(OUTPUT_DIR, "metrics.pkl")
+
 FEATURES_CACHE = "X_features.npy"
 LABELS_CACHE = "y_labels.npy"
 
@@ -151,20 +158,39 @@ def train_model():
     
     # Evaluate
     y_pred = clf.predict(X_test)
+    y_prob = clf.predict_proba(X_test)
+    
     acc = accuracy_score(y_test, y_pred)
     print(f"Accuracy: {acc:.4f}")
-    print("Classification Report:\n", classification_report(y_test, y_pred, target_names=le.classes_))
+    
+    report_dict = classification_report(y_test, y_pred, target_names=le.classes_, output_dict=True)
+    report_str = classification_report(y_test, y_pred, target_names=le.classes_)
+    print("Classification Report:\n", report_str)
     
     cm = confusion_matrix(y_test, y_pred)
     print("Confusion Matrix:")
     print(cm)
     
     # Save model and scaler
-    print("Saving model and scaler...")
+    print("Saving model, scaler, and metrics...")
     joblib.dump(clf, MODEL_PATH)
     joblib.dump(le, LABEL_ENCODER_PATH)
     joblib.dump(scaler, SCALER_PATH)
+    
+    # Save metrics for visualization
+    metrics = {
+        'accuracy': acc,
+        'classification_report': report_dict,
+        'confusion_matrix': cm,
+        'classes': le.classes_,
+        'y_test': y_test,
+        'y_pred': y_pred,
+        'y_prob': y_prob
+    }
+    joblib.dump(metrics, METRICS_PATH)
+    
     print(f"Model saved to {MODEL_PATH}")
+    print(f"Metrics saved to {METRICS_PATH}")
 
 if __name__ == "__main__":
     train_model()
