@@ -79,10 +79,6 @@ To start the web interface:
 uv run streamlit run app.py
 ```
 
-### Dataset used
-
-https://www.kaggle.com/datasets/bjoernjostein/the-circor-digiscope-phonocardiogram-dataset-v2
-
 ## � Project Structure
 
 ```
