@@ -3,6 +3,7 @@ pcg_data1/
 pcg_data2/
 ecg_data/
 Demo_Files/
+eg.py
 
 # Trained models and scalers
 heart_sound_models/
