@@ -19,6 +19,7 @@ from typing import Optional, List
 import tensorflow as tf
 from contextlib import asynccontextmanager
 from scipy.signal import butter, filtfilt
+from explainability import get_gradcam_heatmap
 
 
 # Global model variables
@@ -28,7 +29,7 @@ pcg_model = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load models on startup and cleanup on shutdown"""
+    """Load models on startup and cleanup on shutdown with warmup routine"""
     global ecg_model, pcg_model
     
     print("Loading models...")
@@ -41,8 +42,23 @@ async def lifespan(app: FastAPI):
         pcg_model = tf.keras.models.load_model("heart_sound_models/pcg_crnn_model.keras")
         print("✓ PCG Model loaded successfully")
         
+        # CRITICAL: Warmup routine to build computation graphs
+        print("Warming up models with dummy predictions...")
+        
+        # Warmup ECG model with dummy input (1, 187, 1)
+        dummy_ecg = np.zeros((1, 187, 1), dtype=np.float32)
+        _ = ecg_model.predict(dummy_ecg, verbose=0)
+        print("✓ ECG Model warmed up successfully")
+        
+        # Warmup PCG model with dummy input (1, 5000, 1)
+        dummy_pcg = np.zeros((1, 5000, 1), dtype=np.float32)
+        _ = pcg_model.predict(dummy_pcg, verbose=0)
+        print("✓ PCG Model warmed up successfully")
+        
+        print("✓ All models ready for inference and explainability!")
+        
     except Exception as e:
-        print(f"Error loading models: {e}")
+        print(f"❌ Error loading/warming up models: {e}")
         raise
     
     yield
@@ -285,7 +301,9 @@ async def predict(
         "combined_risk": None,
         "ecg_plot_data": [],
         "pcg_waveform_data": [],
-        "pcg_spectrogram": ""
+        "pcg_spectrogram": "",
+        "ecg_heatmap": [],
+        "pcg_heatmap": []
     }
     
     try:
@@ -298,9 +316,14 @@ async def predict(
             # Run ECG model prediction
             ecg_prediction = ecg_model.predict(ecg_array, verbose=0)
             ecg_risk = float(ecg_prediction[0][0])
+
+            # Generate Grad-CAM heatmap for ECG
+            # The layer name 'conv1d_3' should be verified from your model summary
+            ecg_heatmap = get_gradcam_heatmap(ecg_model, ecg_array, 'conv1d_2')
             
             response["ecg_risk"] = ecg_risk
             response["ecg_plot_data"] = ecg_plot_data
+            response["ecg_heatmap"] = ecg_heatmap
             print(f"ECG Risk Score: {ecg_risk:.4f}")
         
         # Process PCG if provided
@@ -314,10 +337,22 @@ async def predict(
             
             # Take maximum risk across all chunks (worst-case scenario)
             pcg_risk = float(np.max(pcg_predictions))
+
+            # Generate and stitch Grad-CAM heatmaps for PCG
+            stitched_heatmap = []
+            # The layer name 'conv1d_5' should be verified from your model summary
+            for i in range(batch_data.shape[0]):
+                chunk = np.expand_dims(batch_data[i], axis=0) # Shape (1, 5000, 1)
+                heatmap = get_gradcam_heatmap(pcg_model, chunk, 'conv2')
+                stitched_heatmap.extend(heatmap)
+            
+            # Downsample the stitched heatmap to match the waveform data size for visualization
+            pcg_heatmap = stitched_heatmap[::10]
             
             response["pcg_risk"] = pcg_risk
             response["pcg_waveform_data"] = waveform_data
             response["pcg_spectrogram"] = spectrogram_base64
+            response["pcg_heatmap"] = pcg_heatmap
             print(f"PCG Risk Score: {pcg_risk:.4f} (max of {len(pcg_predictions)} chunks)")
         
         # Calculate combined risk if both provided
