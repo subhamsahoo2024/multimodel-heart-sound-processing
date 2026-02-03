@@ -68,7 +68,7 @@ export async function uploadFiles(
         headers: {
           "Content-Type": "multipart/form-data",
         },
-        timeout: 30000, // 30 second timeout
+        timeout: 300000, // 5 minutes timeout
       },
     );
 
